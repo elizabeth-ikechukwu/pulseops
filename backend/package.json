@@ -10,7 +10,14 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "pretest": "node scripts/create-test-db.js && node scripts/migrate-test.js",
+    "test": "jest --runInBand"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "setupFiles": ["<rootDir>/tests/setupEnv.js"],
+    "testTimeout": 15000
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
@@ -21,5 +28,9 @@
     "pg": "^8.12.0",
     "redis": "^4.7.0",
     "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
   }
 }
