@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ink text-body font-sans text-sm antialiased;
+  }
+  :focus-visible {
+    @apply outline outline-2 outline-signal outline-offset-2;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+}
+
+@layer components {
+  /* status pills, translated from the PagerDuty console to dark mode */
+  .pill {
+    @apply inline-block rounded px-2 py-0.5 text-xs font-bold whitespace-nowrap;
+  }
+  .pill-open         { @apply bg-sev1/15 text-sev1; }
+  .pill-acknowledged { @apply bg-sev2/15 text-sev2; }
+  .pill-in_progress  { @apply bg-sev3/15 text-sev3; }
+  .pill-resolved     { @apply bg-okay/15 text-okay; }
+  .pill-closed       { @apply bg-dim/15 text-dim; }
+
+  .sev-text-P1 { @apply text-sev1 font-semibold; }
+  .sev-text-P2 { @apply text-sev2 font-semibold; }
+  .sev-text-P3 { @apply text-sev3 font-semibold; }
+
+  .field-label { @apply block mb-1 text-xs text-dim; }
+  .field-input {
+    @apply w-full rounded border border-line bg-ink px-2.5 py-2 text-sm
+           placeholder:text-dim/60 focus:border-signal focus:outline-none;
+  }
+  .btn {
+    @apply inline-flex items-center gap-1.5 rounded border border-line bg-raise
+           px-3.5 py-2 text-sm cursor-pointer hover:border-dim
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply border-signal bg-signal font-semibold text-white hover:brightness-110 hover:border-signal;
+  }
+}
