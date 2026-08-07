@@ -1,0 +1,76 @@
+name: Backend tests
+
+# Runs on every push and every pull request, so a broken test shows
+# up before it ever gets merged, not after.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # GitHub spins up real Postgres and Redis containers for the
+    # duration of this job, same versions the app actually uses.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pulseops
+          POSTGRES_PASSWORD: localdev123
+          POSTGRES_DB: pulseops_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pulseops"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the test suite
+        run: npm test
+        env:
+          # env.js validates all of this at startup, including during
+          # the pretest step that creates the database and runs
+          # migrations, so everything needs to be here, not just what
+          # the tests themselves touch directly.
+          NODE_ENV: test
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: pulseops_test
+          PGUSER: pulseops
+          PGPASSWORD: localdev123
+          REDIS_URL: redis://localhost:6379/1
+          JWT_ACCESS_SECRET: ci_test_access_secret_not_for_real_use_00
+          JWT_REFRESH_SECRET: ci_test_refresh_secret_not_for_real_use_00
+          BCRYPT_ROUNDS: 4
