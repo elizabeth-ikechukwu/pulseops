@@ -1,0 +1,52 @@
+name: Security scans
+
+# Gitleaks and Trivy run on every push, same as the test workflow.
+# Both are set to report-only right now: findings show up in the
+# logs, but a finding does NOT fail the check or block a merge.
+# continue-on-error: true is what makes each step non-blocking.
+# When the app is more stable, remove those lines to make this
+# workflow a real gate instead of a report.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, so Gitleaks can scan past commits too
+
+      - name: Scan for leaked secrets
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_SUMMARY: true
+
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Scan backend dependencies for known vulnerabilities
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'backend'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0' # report only, never fails the job
+
+      - name: Scan frontend dependencies for known vulnerabilities
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'frontend'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
