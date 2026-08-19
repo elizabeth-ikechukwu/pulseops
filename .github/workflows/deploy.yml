@@ -1,0 +1,90 @@
+name: Build and Deploy
+
+# Builds both images, tags with the commit SHA (for traceability) and
+# latest, pushes to ECR, registers a new task definition revision
+# pointing at the SHA-tagged images, and updates the service to run
+# it. Real deploy, not a shortcut — matches the SHA-tagging pattern
+# used elsewhere, not the :latest-only approach this started as.
+
+on:
+  push:
+    branches: [main]
+    paths: ['backend/**', 'frontend/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 366428725717.dkr.ecr.us-east-1.amazonaws.com
+  ECS_CLUSTER: pulseops-dev-cluster
+  ECS_SERVICE: pulseops-dev-service
+  TASK_FAMILY: pulseops-dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Assume the app deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_APP_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend
+        run: |
+          docker build -t $ECR_REGISTRY/pulseops-dev-backend:${{ github.sha }} \
+                       -t $ECR_REGISTRY/pulseops-dev-backend:latest \
+                       ./backend
+          docker push $ECR_REGISTRY/pulseops-dev-backend:${{ github.sha }}
+          docker push $ECR_REGISTRY/pulseops-dev-backend:latest
+
+      - name: Build and push frontend
+        run: |
+          docker build -t $ECR_REGISTRY/pulseops-dev-frontend:${{ github.sha }} \
+                       -t $ECR_REGISTRY/pulseops-dev-frontend:latest \
+                       ./frontend
+          docker push $ECR_REGISTRY/pulseops-dev-frontend:${{ github.sha }}
+          docker push $ECR_REGISTRY/pulseops-dev-frontend:latest
+
+      - name: Fetch current task definition
+        run: |
+          aws ecs describe-task-definition --task-definition $TASK_FAMILY \
+            --query 'taskDefinition' > task-definition.json
+
+      - name: Update image tags to this commit's SHA
+        run: |
+          jq --arg IMG_BACKEND "$ECR_REGISTRY/pulseops-dev-backend:${{ github.sha }}" \
+             --arg IMG_FRONTEND "$ECR_REGISTRY/pulseops-dev-frontend:${{ github.sha }}" \
+             '(.containerDefinitions[] | select(.name=="backend") | .image) = $IMG_BACKEND
+              | (.containerDefinitions[] | select(.name=="frontend") | .image) = $IMG_FRONTEND
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities, .registeredAt, .registeredBy)' \
+             task-definition.json > new-task-definition.json
+
+      - name: Register new task definition revision
+        id: register
+        run: |
+          NEW_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "task_def_arn=$NEW_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy new revision
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --task-definition ${{ steps.register.outputs.task_def_arn }}
+
+      - name: Wait for deployment to stabilize
+        run: |
+          aws ecs wait services-stable --cluster $ECS_CLUSTER --services $ECS_SERVICE
